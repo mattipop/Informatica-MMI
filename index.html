@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Netwerk-App</title>
+  <style>
+    :root {
+      --bg-color: #f0f4f8;
+      --text-color: #0a1930; 
+      --primary: #1d4ed8; 
+      --nav-bg: #e2e8f0;
+      --card-bg: #ffffff;
+      --border: #cbd5e1;
+      --correct: #059669;
+      --incorrect: #dc2626;
+    }
+
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0; padding: 0;
+      line-height: 1.6;
+    }
+
+    .navbar {
+      background-color: var(--nav-bg);
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .nav-btn {
+      background: none; border: 2px solid var(--text-color);
+      padding: 8px 15px; cursor: pointer; font-weight: bold; border-radius: 5px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 30px auto;
+      padding: 20px;
+      background-color: var(--card-bg);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    h1 { border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+    
+    .btn {
+      background-color: var(--primary); color: white; border: none;
+      padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 5px; margin-top: 15px;
+    }
+    .btn:disabled { background-color: gray; cursor: not-allowed; }
+
+    .menu-btn {
+      display: block; width: 100%; margin-bottom: 10px; padding: 15px;
+      font-size: 18px; border: 2px solid var(--primary); background: white; cursor: pointer;
+    }
+
+    .quiz-btn {
+      display: block; width: 100%; text-align: left; padding: 15px;
+      margin-bottom: 10px; border: 2px solid var(--border); background: white; cursor: pointer; font-size: 16px;
+    }
+    .correct { border-color: var(--correct); background-color: #d1fae5; color: #065f46; }
+    .incorrect { border-color: var(--incorrect); background-color: #fee2e2; color: #991b1b; }
+
+    .box { border: 2px dashed var(--primary); padding: 20px; margin-top: 20px; background: #f8fafc; }
+    input { padding: 10px; font-size: 16px; width: 150px; }
+  </style>
+</head>
+<body>
+
+  <div id="app"></div>
+
+  <script>
+    let huidigeScherm = 1;
+    let geschiedenis = [];
+    
+    let scoreM1 = 0;
+    let scoreM2 = 0;
+    let scoreM3 = 0;
+    let scoreM4 = 0;
+
+    let routeGekozen = [];
+    let dnsFlow = [];
+    let reqMethod = '';
+    let reqProto = '';
+    let reqPort = '';
+
+    let vraagBeantwoord = false;
+
+    function gaNaar(schermNummer) {
+      geschiedenis.push(huidigeScherm);
+      huidigeScherm = schermNummer;
+      vraagBeantwoord = false;
+      tekenScherm();
+    }
+
+    function gaTerug() {
+      if (geschiedenis.length > 0) {
+        huidigeScherm = geschiedenis.pop();
+        tekenScherm();
+      }
+    }
+
+    function theorieHTML(titel, tekst, volgendeScherm, knopTekst = "Volgende") {
+      return `
+        <h1>${titel}</h1>
+        <p>${tekst}</p>
+        <button class="btn" onclick="gaNaar(${volgendeScherm})">${knopTekst}</button>
+      `;
+    }
+
+    function controleerAntwoord(knoppenContainerId, gekozenIndex, juisteIndex, moduleScoreAanpassen, uitleg) {
+      if (vraagBeantwoord) return;
+      vraagBeantwoord = true;
+
+      let knoppen = document.getElementById(knoppenContainerId).children;
+      
+      if (gekozenIndex === juisteIndex) {
+        knoppen[gekozenIndex].classList.add("correct");
+        knoppen[gekozenIndex].innerHTML = "✓ " + knoppen[gekozenIndex].innerHTML;
+        
+        if (moduleScoreAanpassen === 'm1') scoreM1++;
+        if (moduleScoreAanpassen === 'm2') scoreM2++;
+        if (moduleScoreAanpassen === 'm3') scoreM3++;
+        if (moduleScoreAanpassen === 'm4') scoreM4++;
+        
+        if (uitleg) {
+          document.getElementById('quiz-uitleg').innerHTML = `<b>Helemaal goed!</b> ${uitleg}`;
+        }
+      } else {
+        knoppen[gekozenIndex].classList.add("incorrect");
+        knoppen[gekozenIndex].innerHTML = "✗ " + knoppen[gekozenIndex].innerHTML;
+        knoppen[juisteIndex].classList.add("correct");
+        knoppen[juisteIndex].innerHTML = "✓ " + knoppen[juisteIndex].innerHTML;
+      }
+      
+      document.getElementById('volgende-knop').style.display = 'block';
+    }
+
+    function berekenBinair() {
+      let getal = document.getElementById('bin-input').value;
+      if (getal >= 0 && getal <= 255 && getal !== "") {
+        document.getElementById('bin-output').innerText = Number(getal).toString(2).padStart(8, '0');
+      } else {
+        document.getElementById('bin-output').innerText = "Typ een getal tussen 0 en 255";
+      }
+    }
+
+    function kiesRoute(punt) {
+      if (!routeGekozen.includes(punt)) routeGekozen.push(punt);
+      document.getElementById('route-tekst').innerText = routeGekozen.join(' -> ');
+      if (routeGekozen.join(',') === 'A,B,C') {
+        document.getElementById('route-succes').innerText = '✓ Route succesvol berekend!';
+        document.getElementById('route-next').disabled = false;
+      }
+    }
+
+    function kiesDns(stap) {
+      if (!dnsFlow.includes(stap)) dnsFlow.push(stap);
+      document.getElementById('dns-tekst').innerText = dnsFlow.join(' ➔ ');
+      
+      if (dnsFlow.length === 3) {
+        if (dnsFlow.join(',') === 'Gebruiker,Resolver,Name Server') {
+          document.getElementById('dns-msg').innerHTML = '<span style="color: green; font-weight: bold;">✓ Correct!</span>';
+          document.getElementById('dns-next').disabled = false;
+        } else {
+          document.getElementById('dns-msg').innerHTML = '<span style="color: red;">✗ Fout, probeer opnieuw.</span><br><button onclick="dnsFlow=[]; tekenScherm();" class="btn">Reset</button>';
+        }
+      }
+    }
+
+    function kiesReq(soort, waarde) {
+      if (soort === 'methode') reqMethod = waarde;
+      if (soort === 'proto') reqProto = waarde;
+      if (soort === 'poort') reqPort = waarde;
+      
+      document.getElementById('req-tekst').innerText = `${reqMethod || '[?]'} request via ${reqProto || '[?]'} op poort ${reqPort || '[?]'}`;
+      
+      if (reqMethod === 'GET' && reqProto === 'HTTP' && reqPort === '80') {
+        document.getElementById('req-succes').innerText = '✓ Perfect request gebouwd!';
+        document.getElementById('req-next').disabled = false;
+      }
+    }
+
+    function tekenScherm() {
+      let appDiv = document.getElementById('app');
+      let html = '';
+
+      if (huidigeScherm !== 1) {
+        html += `
+          <div class="navbar">
+            <button class="nav-btn" onclick="gaTerug()">Terug</button>
+            <button class="nav-btn" onclick="gaNaar(2)">Home</button>
+            <button class="nav-btn" onclick="gaNaar(39)">Index</button>
+          </div>
+        `;
+      }
+
+      html += `<div class="container">`;
+
+      switch (huidigeScherm) {
+        case 1:
+          html += `
+            <div style="text-align: center; margin-top: 50px;">
+              <h1>Netwerk-App</h1>
+              <p style="font-size: 20px; color: var(--primary);">Leer alles over computernetwerken!</p>
+              <button class="btn" style="font-size: 20px; padding: 15px 30px;" onclick="gaNaar(2)">Start</button>
+            </div>
+          `;
+          break;
+        case 2:
+          html += `
+            <h1>Kies een Module</h1>
+            <button class="menu-btn" onclick="gaNaar(3)">1. IP-Adressen</button>
+            <button class="menu-btn" onclick="gaNaar(12)">2. Routing</button>
+            <button class="menu-btn" onclick="gaNaar(21)">3. DNS</button>
+            <button class="menu-btn" onclick="gaNaar(30)">4. Cliënt-Server</button>
+            <button class="btn" onclick="gaNaar(40)" style="width: 100%; margin-top: 30px; background: #475569;">Eindresultaten bekijken</button>
+          `;
+          break;
+
+        case 3: html += theorieHTML("Wat is een IP-adres?", "Een IP-adres is het unieke adres van een apparaat op het internet. Zonder dit adres kan data de weg naar jouw apparaat niet vinden, net zoals een postbode je huisnummer nodig heeft.", 4); break;
+        case 4: html += theorieHTML("IPv4 vs IPv6", "IPv4 bestaat uit 4 getallen (bijv. 192.168.1.1). Omdat deze opraken, is IPv6 bedacht met veel meer combinaties.", 5); break;
+        case 5: html += theorieHTML("Binaire Weergave", "Computers lezen IP-adressen niet als normale getallen, maar als enen en nullen (binair). 8 bits vormen samen 1 byte.", 6); break;
+        case 6:
+          html += `
+            <h1>Binaire Converter</h1>
+            <p>Computers lezen IP-adressen binair. Test het zelf:</p>
+            <div class="box">
+              <input type="number" id="bin-input" placeholder="Getal 0-255">
+              <button class="btn" onclick="berekenBinair()">Bereken</button>
+              <h2 id="bin-output" style="letter-spacing: 5px; margin-top: 15px;">00000000</h2>
+            </div>
+            <button class="btn" onclick="gaNaar(7)">Volgende</button>
+          `;
+          break;
+        case 7: html += theorieHTML("Subnetmaskers", "Een subnetmasker verdeelt een IP-adres in een netwerkgedeelte (de straat) en een hostgedeelte (het huisnummer).", 8); break;
+        case 8: html += theorieHTML("Publiek vs Privé", "Je thuisnetwerk gebruikt privé IP-adressen (zoals 192.168.x.x). Je router heeft één publiek IP-adres naar de buitenwereld.", 9, "Start Quiz"); break;
+        case 9:
+          html += `
+            <h2>Hoeveel getallen heeft een IPv4 adres?</h2>
+            <div id="q1">
+              <button class="quiz-btn" onclick="controleerAntwoord('q1', 0, 0, 'm1', 'Een IPv4-adres bestaat uit 4 getallen.')">4</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q1', 1, 0, 'm1', '')">6</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q1', 2, 0, 'm1', '')">8</button>
+            </div>
+            <p id="quiz-uitleg"></p>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(10)">Volgende</button>
+          `;
+          break;
+        case 10:
+          html += `
+            <h2>Welk IP-adres is een typisch privé-adres?</h2>
+            <div id="q2">
+              <button class="quiz-btn" onclick="controleerAntwoord('q2', 0, 1, 'm1')">8.8.8.8</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q2', 1, 1, 'm1')">192.168.1.5</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q2', 2, 1, 'm1')">1.1.1.1</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(11)">Volgende</button>
+          `;
+          break;
+        case 11:
+          html += `
+            <h2>Hoe leest een computer een IP-adres?</h2>
+            <div id="q3">
+              <button class="quiz-btn" onclick="controleerAntwoord('q3', 0, 1, 'm1')">Hexadecimaal</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q3', 1, 1, 'm1')">Binair</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q3', 2, 1, 'm1')">Decimaal</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(2)">Terug naar Hoofdmenu</button>
+          `;
+          break;
+
+        case 12: html += theorieHTML("Wat is een Router?", "Een router is de verkeersregelaar van het internet. Hij verbindt netwerken en beslist waar datapakketjes naartoe moeten.", 13); break;
+        case 13: html += theorieHTML("Pakketschakeling (Packet Switching)", "Data (zoals een video) wordt opgeknipt in kleine pakketjes. Elk pakketje kan een andere route nemen naar de bestemming.", 14); break;
+        case 14: html += theorieHTML("Routing Tabellen", "Routers houden een 'routing table' bij. Dit is een soort kaart waarop staat welke verbinding het snelst is.", 15); break;
+        case 15: html += theorieHTML("Het Kortste Pad", "Netwerken veranderen constant. Als er een kabel stuk is, berekent de router direct een nieuwe, snelste route (bijv. via het Dijkstra-algoritme).", 16); break;
+        case 16:
+          routeGekozen = [];
+          html += `
+            <h1>Kies de Route</h1>
+            <p>Klik de knooppunten aan in de juiste volgorde (A -> B -> C).</p>
+            <div class="box">
+              <button class="btn" onclick="kiesRoute('A')">Knooppunt A</button>
+              <button class="btn" onclick="kiesRoute('B')">Knooppunt B</button>
+              <button class="btn" onclick="kiesRoute('C')">Knooppunt C</button>
+              <p style="margin-top:20px; font-weight:bold;">Route: <span id="route-tekst"></span></p>
+              <p id="route-succes" style="color:var(--correct);"></p>
+            </div>
+            <button class="btn" id="route-next" disabled onclick="gaNaar(17)">Volgende</button>
+          `;
+          break;
+        case 17: html += theorieHTML("Time To Live (TTL)", "Om te voorkomen dat pakketjes oneindig blijven rondzweven, hebben ze een TTL. Na een x aantal 'hops' (sprongen) wordt het pakketje vernietigd.", 18, "Start Quiz"); break;
+        case 18:
+          html += `
+            <h2>Wat doet een router?</h2>
+            <div id="q4">
+              <button class="quiz-btn" onclick="controleerAntwoord('q4', 0, 1, 'm2')">Maakt websites</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q4', 1, 1, 'm2')">Stuurt datapakketjes de juiste kant op</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q4', 2, 1, 'm2')">Vertaalt namen naar IP's</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(19)">Volgende</button>
+          `;
+          break;
+        case 19:
+          html += `
+            <h2>Hoe wordt data verstuurd?</h2>
+            <div id="q5">
+              <button class="quiz-btn" onclick="controleerAntwoord('q5', 0, 2, 'm2')">In één groot bestand</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q5', 1, 2, 'm2')">Via satelliet</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q5', 2, 2, 'm2')">In kleine pakketjes</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(20)">Volgende</button>
+          `;
+          break;
+        case 20:
+          html += `
+            <h2>Wat voorkomt dat een pakketje eeuwig blijft rondzwerven?</h2>
+            <div id="q6">
+              <button class="quiz-btn" onclick="controleerAntwoord('q6', 0, 0, 'm2')">TTL</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q6', 1, 0, 'm2')">DNS</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q6', 2, 0, 'm2')">HTTP</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(2)">Terug naar Hoofdmenu</button>
+          `;
+          break;
+
+        case 21: html += theorieHTML("Wat is DNS?", "DNS (Domain Name System) is het telefoonboek van het internet. Het vertaalt makkelijke namen (google.com) naar moeilijke IP-adressen.", 22); break;
+        case 22: html += theorieHTML("De opbouw van een domein", "Een domein bestaat uit een TLD (Top Level Domain, zoals .nl), een domeinnaam (zoals wikipedia) en evt. een subdomein (nl.wikipedia.org).", 23); break;
+        case 23: html += theorieHTML("Stap 1: De Aanvraag", "Jij typt een URL in. Jouw computer kijkt eerst in zijn eigen cache (geheugen) of hij het IP-adres al kent.", 24); break;
+        case 24: html += theorieHTML("De DNS Resolver", "Kent je PC het adres niet? Dan vraagt hij het aan de DNS Resolver van jouw internetprovider.", 25); break;
+        case 25: html += theorieHTML("Root en TLD Servers", "De Resolver zoekt via Root-servers en TLD-servers tot hij de juiste Name Server vindt die het IP-adres weet.", 26); break;
+        case 26:
+          dnsFlow = [];
+          html += `
+            <h1>DNS Flow</h1>
+            <p>Klik de stappen in de juiste volgorde: 1. Gebruiker, 2. Resolver, 3. Name Server.</p>
+            <div class="box">
+              <button class="btn" onclick="kiesDns('Name Server')">Name Server</button>
+              <button class="btn" onclick="kiesDns('Gebruiker')">Jij (Gebruiker)</button>
+              <button class="btn" onclick="kiesDns('Resolver')">DNS Resolver</button>
+              <p style="margin-top:20px;">Volgorde: <span id="dns-tekst" style="font-weight:bold;"></span></p>
+              <div id="dns-msg"></div>
+            </div>
+            <button class="btn" id="dns-next" disabled onclick="gaNaar(27)">Volgende</button>
+          `;
+          break;
+        case 27:
+          html += `
+            <h2>Wat is het 'telefoonboek' van het internet?</h2>
+            <div id="q7">
+              <button class="quiz-btn" onclick="controleerAntwoord('q7', 0, 1, 'm3')">IP</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q7', 1, 1, 'm3')">DNS</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q7', 2, 1, 'm3')">Router</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(28)">Volgende</button>
+          `;
+          break;
+        case 28:
+          html += `
+            <h2>Wat is een TLD?</h2>
+            <div id="q8">
+              <button class="quiz-btn" onclick="controleerAntwoord('q8', 0, 0, 'm3')">.com of .nl</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q8', 1, 0, 'm3')">De hele URL</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q8', 2, 0, 'm3')">Een router-protocol</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(29)">Volgende</button>
+          `;
+          break;
+        case 29:
+          html += `
+            <h2>Aan wie stelt jouw computer de DNS-vraag als eerste (na cache)?</h2>
+            <div id="q9">
+              <button class="quiz-btn" onclick="controleerAntwoord('q9', 0, 1, 'm3')">Root server</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q9', 1, 1, 'm3')">DNS Resolver</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q9', 2, 1, 'm3')">Webserver</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(2)">Terug naar Hoofdmenu</button>
+          `;
+          break;
+
+        case 30: html += theorieHTML("Cliënt en Server", "Jij bent de Cliënt (de vrager). De krachtige computer waar de website op staat is de Server (de leverancier).", 31); break;
+        case 31: html += theorieHTML("HTTP en HTTPS", "De taal waarmee cliënt en server praten heet HTTP. De 'S' bij HTTPS staat voor Secure (beveiligd met encryptie).", 32); break;
+        case 32: html += theorieHTML("Request en Response", "De cliënt stuurt een 'Request' (bijv. GET index.html). De server stuurt een 'Response' terug met de webpagina.", 33); break;
+        case 33: html += theorieHTML("Poorten (Ports)", "Verkeer komt binnen via een poort. Webverkeer (HTTP) gaat via poort 80, beveiligd verkeer (HTTPS) via poort 443.", 34); break;
+        case 34:
+          reqMethod = ''; reqProto = ''; reqPort = '';
+          html += `
+            <h1>Bouw een Request</h1>
+            <p>Maak een onbeveiligd web-request: kies GET, HTTP en poort 80.</p>
+            <div class="box">
+              <button class="btn" onclick="kiesReq('methode', 'GET')">GET</button>
+              <button class="btn" onclick="kiesReq('methode', 'POST')">POST</button> |
+              
+              <button class="btn" onclick="kiesReq('proto', 'HTTP')">HTTP</button>
+              <button class="btn" onclick="kiesReq('proto', 'FTP')">FTP</button> |
+              
+              <button class="btn" onclick="kiesReq('poort', '80')">80</button>
+              <button class="btn" onclick="kiesReq('poort', '443')">443</button>
+              
+              <p style="margin-top:20px; padding:10px; background:white;"><b>Request:</b> <span id="req-tekst">${reqMethod || '[?]'} request via ${reqProto || '[?]'} op poort ${reqPort || '[?]'}</span></p>
+              <p id="req-succes" style="color:var(--correct);"></p>
+            </div>
+            <button class="btn" id="req-next" disabled onclick="gaNaar(35)">Volgende</button>
+          `;
+          break;
+        case 35: html += theorieHTML("Status Codes", "De server stuurt een code terug: 200 = OK, 404 = Pagina niet gevonden, 500 = Interne server fout.", 36, "Start Quiz"); break;
+        case 36:
+          html += `
+            <h2>Wie is de 'cliënt' in dit model?</h2>
+            <div id="q10">
+              <button class="quiz-btn" onclick="controleerAntwoord('q10', 0, 1, 'm4')">De webserver</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q10', 1, 1, 'm4')">Jouw webbrowser</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q10', 2, 1, 'm4')">De router</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(37)">Volgende</button>
+          `;
+          break;
+        case 37:
+          html += `
+            <h2>Welke poort wordt gebruikt voor beveiligd HTTPS-verkeer?</h2>
+            <div id="q11">
+              <button class="quiz-btn" onclick="controleerAntwoord('q11', 0, 2, 'm4')">80</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q11', 1, 2, 'm4')">21</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q11', 2, 2, 'm4')">443</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(38)">Volgende</button>
+          `;
+          break;
+        case 38:
+          html += `
+            <h2>Wat betekent de statuscode 404?</h2>
+            <div id="q12">
+              <button class="quiz-btn" onclick="controleerAntwoord('q12', 0, 1, 'm4')">Alles is goed gegaan</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q12', 1, 1, 'm4')">Pagina niet gevonden</button>
+              <button class="quiz-btn" onclick="controleerAntwoord('q12', 2, 1, 'm4')">Server gecrasht</button>
+            </div>
+            <button id="volgende-knop" class="btn" style="display:none;" onclick="gaNaar(2)">Terug naar Hoofdmenu</button>
+          `;
+          break;
+
+        case 39:
+          html += `
+            <h1>Begrippenlijst</h1>
+            <div style="max-height: 300px; overflow-y: auto; padding-right: 10px;">
+              <ul style="list-style:none; padding:0; font-size: 18px;">
+                <li style="border-bottom:1px solid var(--border); padding:10px 0;"><b>IP:</b> Het unieke adres van een apparaat op het internet of een lokaal netwerk.</li>
+                <li style="border-bottom:1px solid var(--border); padding:10px 0;"><b>Router:</b> De verkeersregelaar die datapakketjes via de snelste route naar hun bestemming stuurt.</li>
+                <li style="border-bottom:1px solid var(--border); padding:10px 0;"><b>DNS:</b> Het systeem (Domain Name System) dat leesbare domeinnamen vertaalt naar IP-adressen.</li>
+                <li style="border-bottom:1px solid var(--border); padding:10px 0;"><b>TCP:</b> Zorgt ervoor dat alle opgedeelde datapakketjes betrouwbaar en in de juiste volgorde aankomen.</li>
+                <li style="border-bottom:1px solid var(--border); padding:10px 0;"><b>HTTP / HTTPS:</b> De taal (protocol) waarmee je webbrowser en een webserver met elkaar communiceren.</li>
+              </ul>
+            </div>
+          `;
+          break;
+        case 40:
+          let totaal = scoreM1 + scoreM2 + scoreM3 + scoreM4;
+          html += `
+            <h1>Jouw Eindresultaten</h1>
+            <div class="box" style="font-size: 18px;">
+              <p>Module 1 (IP): <b>${scoreM1}/3</b></p>
+              <p>Module 2 (Routing): <b>${scoreM2}/3</b></p>
+              <p>Module 3 (DNS): <b>${scoreM3}/3</b></p>
+              <p>Module 4 (Cliënt-Server): <b>${scoreM4}/3</b></p>
+              <hr>
+              <p style="font-size: 22px;"><b>Totaal Score: ${totaal} / 12</b></p>
+            </div>
+            <button class="btn" onclick="location.reload()">Herstart de hele app</button>
+          `;
+          break;
+      }
+
+      html += `</div>`;
+      appDiv.innerHTML = html;
+    }
+
+    window.onload = tekenScherm;
+  </script>
+</body>
+</html>
